@@ -1,0 +1,58 @@
+# Informações sobre a Action test-summary
+# https://github.com/test-summary
+
+name: .NET
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PATH_PROJECT: ./Temperatura/Temperatura.csproj
+  PATH_TESTS_PROJECT: ./Temperatura.Specs/Temperatura.Specs.csproj
+  NUGET_SERVER: https://api.nuget.org/v3/index.json
+  TEST_RESULTS_DIRECTORY: ./TestResults
+  TEST_RESULTS_FILE: ./TestResults/resultado-testes.xml
+
+jobs:
+  tests:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Execução dos testes (com geração de XML no padrão do JUnit)
+      run: dotnet test ${{ env.PATH_TESTS_PROJECT }} --results-directory ${{ env.TEST_RESULTS_DIRECTORY }} --logger:"junit;LogFileName=resultado-testes.xml"
+    - name: Exibir resultado da execução dos testes com xUnit já convertido para JUnit
+      if: always()
+      run: |
+        ls
+        echo "Conteúdo do diretório ${{ env.TEST_RESULTS_DIRECTORY }}"
+        cd ${{ env.TEST_RESULTS_DIRECTORY }}
+        ls
+        cat resultado-testes.xml
+    - name: Criar Test Summary
+      uses: test-summary/action@v1
+      with:
+        paths: ${{ env.TEST_RESULTS_FILE }}
+      if: always()
+      
+  pack-push:
+    needs: [tests]
+    
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET 6
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.201
+    - name: Geração do package
+      run: dotnet pack ${{ env.PATH_PROJECT }} -c Release -o out
+    - name: Push no NuGet
+      run: |
+        cd out
+        dotnet nuget push *.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source ${{ env.NUGET_SERVER }} --skip-duplicate
